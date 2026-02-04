@@ -598,35 +598,117 @@ func (r *pdfRenderer) renderBlockquote(content string) {
 
 // renderList renders ordered or unordered lists
 func (r *pdfRenderer) renderList(content string, ordered bool) {
-	// Parse list items
-	itemPattern := regexp.MustCompile(`<li>([\s\S]*?)</li>`)
-	matches := itemPattern.FindAllStringSubmatch(content, -1)
-
 	r.pdf.Ln(2)
+	r.renderListItems(content, ordered, 0, 1)
+	r.pdf.Ln(3)
+}
 
-	for i, match := range matches {
-		if len(match) > 1 {
-			itemContent := stripInlineTags(match[1])
-			itemContent = decodeHTMLEntities(itemContent)
-			itemContent = strings.TrimSpace(itemContent)
+// parseListItems extracts list items handling nested tags properly
+func parseListItems(content string) []string {
+	var items []string
+	pos := 0
 
-			r.pdf.SetX(r.leftMargin + 8)
-			r.pdf.SetFont(r.fontFamily, "", 11)
-			r.pdf.SetTextColor(0, 0, 0)
+	for pos < len(content) {
+		// Find the next <li> tag
+		liStart := strings.Index(content[pos:], "<li>")
+		if liStart == -1 {
+			break
+		}
+		liStart += pos + 4 // Move past "<li>"
 
-			var bullet string
-			if ordered {
-				bullet = fmt.Sprintf("%d. ", i+1)
-			} else {
-				bullet = "• "
-			}
+		// Find the matching </li> using proper nesting handling
+		closeIdx := findClosingTag(content[liStart:], "li")
+		if closeIdx == -1 {
+			break
+		}
 
-			r.pdf.CellFormat(8, r.lineHeight, bullet, "", 0, "L", false, 0, "")
-			r.pdf.MultiCell(r.contentWidth-16, r.lineHeight, itemContent, "", "L", false)
+		itemContent := content[liStart : liStart+closeIdx]
+		items = append(items, itemContent)
+
+		pos = liStart + closeIdx + 5 // Move past "</li>"
+	}
+
+	return items
+}
+
+// renderListItems recursively renders list items with proper nesting support
+func (r *pdfRenderer) renderListItems(content string, ordered bool, level int, startNum int) int {
+	// Bullet styles for different nesting levels
+	bulletStyles := []string{"•", "◦", "▪", "▫"}
+
+	// Indentation per level (in mm)
+	indentPerLevel := 8.0
+	baseIndent := r.leftMargin + 8
+
+	// Parse list items at current level using proper nested tag handling
+	listItems := parseListItems(content)
+
+	itemNum := startNum
+	for _, itemContent := range listItems {
+		// Check for nested lists within this item
+		nestedULPattern := regexp.MustCompile(`(?s)<ul>(.*)</ul>`)
+		nestedOLPattern := regexp.MustCompile(`(?s)<ol>(.*)</ol>`)
+
+		nestedUL := nestedULPattern.FindStringSubmatch(itemContent)
+		nestedOL := nestedOLPattern.FindStringSubmatch(itemContent)
+
+		// Extract the text content before any nested list
+		textContent := itemContent
+		if nestedUL != nil {
+			textContent = itemContent[:nestedULPattern.FindStringIndex(itemContent)[0]]
+		} else if nestedOL != nil {
+			textContent = itemContent[:nestedOLPattern.FindStringIndex(itemContent)[0]]
+		}
+
+		// Clean up the text content
+		textContent = stripInlineTags(textContent)
+		textContent = decodeHTMLEntities(textContent)
+		textContent = strings.TrimSpace(textContent)
+
+		// Calculate indentation for current level
+		currentIndent := baseIndent + (float64(level) * indentPerLevel)
+
+		// Render the list item
+		r.pdf.SetX(currentIndent)
+		r.pdf.SetFont(r.fontFamily, "", 11)
+		r.pdf.SetTextColor(0, 0, 0)
+
+		var bullet string
+		if ordered {
+			bullet = fmt.Sprintf("%d. ", itemNum)
+			itemNum++
+		} else {
+			// Use different bullet style based on nesting level
+			bulletIndex := level % len(bulletStyles)
+			bullet = bulletStyles[bulletIndex] + " "
+		}
+
+		// Render bullet
+		r.pdf.CellFormat(8, r.lineHeight, bullet, "", 0, "L", false, 0, "")
+
+		// Calculate available width for content
+		availableWidth := r.contentWidth - 16 - (float64(level) * indentPerLevel)
+		if availableWidth < 50 {
+			availableWidth = 50 // Minimum width
+		}
+
+		// Render item text
+		if textContent != "" {
+			r.pdf.MultiCell(availableWidth, r.lineHeight, textContent, "", "L", false)
+		} else {
+			r.pdf.Ln(r.lineHeight)
+		}
+
+		// Recursively render nested lists
+		if nestedUL != nil {
+			r.renderListItems(nestedUL[1], false, level+1, 1)
+		}
+		if nestedOL != nil {
+			r.renderListItems(nestedOL[1], true, level+1, 1)
 		}
 	}
 
-	r.pdf.Ln(3)
+	return itemNum
 }
 
 // renderTable renders an HTML table
