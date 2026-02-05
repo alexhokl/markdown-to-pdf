@@ -814,6 +814,101 @@ func TestParseListItemsWithWhitespace(t *testing.T) {
 	}
 }
 
+// TestReplaceEmojis tests the replaceEmojis function
+func TestReplaceEmojis(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "circle emoji",
+			input:    "Status: ⭕️",
+			expected: "Status: [O]",
+		},
+		{
+			name:     "cross emoji",
+			input:    "Failed: ❌",
+			expected: "Failed: [X]",
+		},
+		{
+			name:     "check emoji",
+			input:    "Done: ✅",
+			expected: "Done: [v]",
+		},
+		{
+			name:     "multiple emojis",
+			input:    "⭕️ ❌ ✅",
+			expected: "[O] [X] [v]",
+		},
+		{
+			name:     "emoji in sentence",
+			input:    "The task is ✅ complete and ❌ was rejected",
+			expected: "The task is [v] complete and [X] was rejected",
+		},
+		{
+			name:     "no emojis",
+			input:    "Plain text without emojis",
+			expected: "Plain text without emojis",
+		},
+		{
+			name:     "rocket emoji",
+			input:    "Launch 🚀",
+			expected: "Launch [rocket]",
+		},
+		{
+			name:     "thumbs up",
+			input:    "Good job 👍",
+			expected: "Good job [+1]",
+		},
+		{
+			name:     "arrow emoji with variant selector",
+			input:    "Go ➡️ here",
+			expected: "Go -> here",
+		},
+		{
+			name:     "arrow emoji base only",
+			input:    "Go ➡ here",
+			expected: "Go -> here",
+		},
+		{
+			name:     "smiley face",
+			input:    "Hello 😀",
+			expected: "Hello :)",
+		},
+		{
+			name:     "warning emoji",
+			input:    "⚠️ Caution",
+			expected: "[!] Caution",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := replaceEmojis(tt.input)
+			if result != tt.expected {
+				t.Errorf("replaceEmojis(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestReplaceEmojisInHTML tests emoji replacement in HTML content
+func TestReplaceEmojisInHTML(t *testing.T) {
+	input := `<p>Task list:</p><ul><li>⭕️ Open</li><li>❌ Rejected</li><li>✅ Done</li></ul>`
+	expected := `<p>Task list:</p><ul><li>[O] Open</li><li>[X] Rejected</li><li>[v] Done</li></ul>`
+
+	result := replaceEmojis(input)
+	if result != expected {
+		t.Errorf("replaceEmojis in HTML failed.\nGot: %q\nWant: %q", result, expected)
+	}
+}
+
 // TestParseHTMLElements tests the parseHTMLElements function with list content
 func TestParseHTMLElementsWithLists(t *testing.T) {
 	tests := []struct {

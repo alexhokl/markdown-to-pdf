@@ -313,6 +313,10 @@ func (r *pdfRenderer) renderHTML(htmlContent string) {
 	r.pdf.SetFont(r.fontFamily, "", 11)
 	r.pdf.SetTextColor(0, 0, 0)
 
+	// Replace emojis with text equivalents before parsing
+	// This ensures emojis can be rendered using standard fonts
+	htmlContent = replaceEmojis(htmlContent)
+
 	// Parse HTML and render elements
 	elements := parseHTMLElements(htmlContent)
 	for _, elem := range elements {
