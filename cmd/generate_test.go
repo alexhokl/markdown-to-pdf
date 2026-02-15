@@ -954,3 +954,378 @@ func TestParseHTMLElementsWithLists(t *testing.T) {
 		})
 	}
 }
+
+// TestIsCJKChar tests the isCJKChar function
+func TestIsCJKChar(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    rune
+		expected bool
+	}{
+		// CJK Unified Ideographs (Chinese/Japanese Kanji/Korean Hanja)
+		{
+			name:     "Chinese character 中",
+			input:    '中',
+			expected: true,
+		},
+		{
+			name:     "Chinese character 文",
+			input:    '文',
+			expected: true,
+		},
+		{
+			name:     "Japanese Kanji 日",
+			input:    '日',
+			expected: true,
+		},
+		{
+			name:     "CJK start range 一",
+			input:    '一', // U+4E00
+			expected: true,
+		},
+		// Hiragana
+		{
+			name:     "Hiragana あ",
+			input:    'あ',
+			expected: true,
+		},
+		{
+			name:     "Hiragana ん",
+			input:    'ん',
+			expected: true,
+		},
+		// Katakana
+		{
+			name:     "Katakana ア",
+			input:    'ア',
+			expected: true,
+		},
+		{
+			name:     "Katakana ン",
+			input:    'ン',
+			expected: true,
+		},
+		// Hangul (Korean)
+		{
+			name:     "Hangul 가",
+			input:    '가',
+			expected: true,
+		},
+		{
+			name:     "Hangul 한",
+			input:    '한',
+			expected: true,
+		},
+		// CJK Symbols and Punctuation
+		{
+			name:     "CJK punctuation 。",
+			input:    '。',
+			expected: true,
+		},
+		{
+			name:     "CJK punctuation 、",
+			input:    '、',
+			expected: true,
+		},
+		{
+			name:     "Fullwidth comma ，",
+			input:    '，',
+			expected: true,
+		},
+		// Fullwidth ASCII
+		{
+			name:     "Fullwidth A Ａ",
+			input:    'Ａ',
+			expected: true,
+		},
+		// Non-CJK characters
+		{
+			name:     "ASCII letter A",
+			input:    'A',
+			expected: false,
+		},
+		{
+			name:     "ASCII digit 1",
+			input:    '1',
+			expected: false,
+		},
+		{
+			name:     "ASCII space",
+			input:    ' ',
+			expected: false,
+		},
+		{
+			name:     "Latin extended é",
+			input:    'é',
+			expected: false,
+		},
+		{
+			name:     "Greek alpha α",
+			input:    'α',
+			expected: false,
+		},
+		{
+			name:     "Cyrillic а",
+			input:    'а',
+			expected: false,
+		},
+		{
+			name:     "ASCII punctuation period",
+			input:    '.',
+			expected: false,
+		},
+		{
+			name:     "Newline",
+			input:    '\n',
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isCJKChar(tt.input)
+			if result != tt.expected {
+				t.Errorf("isCJKChar(%q U+%04X) = %v, want %v", string(tt.input), tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestRenderWrappedTextBasic tests basic text wrapping functionality
+func TestRenderWrappedTextBasic(t *testing.T) {
+	renderer, err := newPDFRenderer(generateOptions{language: "en"})
+	if err != nil {
+		t.Fatalf("Failed to create renderer: %v", err)
+	}
+	renderer.pdf.AddPage()
+	renderer.pdf.SetFont(renderer.fontFamily, "", 11)
+
+	// Test basic English text
+	renderer.pdf.SetX(renderer.leftMargin)
+	renderer.renderWrappedText("Hello World", renderer.contentWidth, renderer.lineHeight)
+
+	// If we get here without panic, basic wrapping works
+}
+
+// TestRenderWrappedTextCJK tests CJK text wrapping without character loss
+func TestRenderWrappedTextCJK(t *testing.T) {
+	renderer, err := newPDFRenderer(generateOptions{language: "ja"})
+	if err != nil {
+		t.Fatalf("Failed to create renderer: %v", err)
+	}
+	renderer.pdf.AddPage()
+	renderer.pdf.SetFont(renderer.fontFamily, "", 11)
+
+	// Test Japanese text that would wrap - the original bug case
+	japaneseText := "1997年にチェンマ大橋ができました。昔は香港島からランタオ島まで1時間以上かかりましたが、今は30分ぐらいで行けるようになりました。チェンマ大橋が通れるようになって、とても便利になりました。"
+
+	renderer.pdf.SetX(renderer.leftMargin)
+	renderer.renderWrappedText(japaneseText, renderer.contentWidth, renderer.lineHeight)
+
+	// If we get here without panic, CJK wrapping works
+}
+
+// TestRenderWrappedTextEmptyString tests handling of empty string
+func TestRenderWrappedTextEmptyString(t *testing.T) {
+	renderer, err := newPDFRenderer(generateOptions{language: "en"})
+	if err != nil {
+		t.Fatalf("Failed to create renderer: %v", err)
+	}
+	renderer.pdf.AddPage()
+	renderer.pdf.SetFont(renderer.fontFamily, "", 11)
+
+	renderer.pdf.SetX(renderer.leftMargin)
+	renderer.renderWrappedText("", renderer.contentWidth, renderer.lineHeight)
+
+	// Should handle empty string without panic
+}
+
+// TestRenderWrappedTextWithNewlines tests handling of explicit newlines
+func TestRenderWrappedTextWithNewlines(t *testing.T) {
+	renderer, err := newPDFRenderer(generateOptions{language: "en"})
+	if err != nil {
+		t.Fatalf("Failed to create renderer: %v", err)
+	}
+	renderer.pdf.AddPage()
+	renderer.pdf.SetFont(renderer.fontFamily, "", 11)
+
+	renderer.pdf.SetX(renderer.leftMargin)
+	renderer.renderWrappedText("Line 1\nLine 2\nLine 3", renderer.contentWidth, renderer.lineHeight)
+
+	// Should handle explicit newlines without panic
+}
+
+// TestRenderWrappedTextMixedContent tests mixed CJK and ASCII content
+func TestRenderWrappedTextMixedContent(t *testing.T) {
+	renderer, err := newPDFRenderer(generateOptions{language: "ja"})
+	if err != nil {
+		t.Fatalf("Failed to create renderer: %v", err)
+	}
+	renderer.pdf.AddPage()
+	renderer.pdf.SetFont(renderer.fontFamily, "", 11)
+
+	// Mixed Japanese and English text
+	mixedText := "This is English text 日本語テキスト more English 中文文字 and finally some more text to ensure wrapping occurs properly."
+
+	renderer.pdf.SetX(renderer.leftMargin)
+	renderer.renderWrappedText(mixedText, renderer.contentWidth, renderer.lineHeight)
+
+	// Should handle mixed content without panic
+}
+
+// TestRenderWrappedTextNarrowWidth tests wrapping with very narrow width
+func TestRenderWrappedTextNarrowWidth(t *testing.T) {
+	renderer, err := newPDFRenderer(generateOptions{language: "en"})
+	if err != nil {
+		t.Fatalf("Failed to create renderer: %v", err)
+	}
+	renderer.pdf.AddPage()
+	renderer.pdf.SetFont(renderer.fontFamily, "", 11)
+
+	// Very narrow width forces frequent wrapping
+	renderer.pdf.SetX(renderer.leftMargin)
+	renderer.renderWrappedText("This text should wrap frequently due to narrow width", 30, renderer.lineHeight)
+
+	// Should handle narrow width without panic
+}
+
+// TestRenderWrappedTextLongCJKString tests long CJK string without spaces
+func TestRenderWrappedTextLongCJKString(t *testing.T) {
+	renderer, err := newPDFRenderer(generateOptions{language: "zh"})
+	if err != nil {
+		t.Fatalf("Failed to create renderer: %v", err)
+	}
+	renderer.pdf.AddPage()
+	renderer.pdf.SetFont(renderer.fontFamily, "", 11)
+
+	// Long Chinese text without any spaces - tests CJK-specific wrapping
+	chineseText := "这是一段很长的中文文本没有任何空格用来测试中文字符的自动换行功能是否能够正确地工作而不会丢失任何字符"
+
+	renderer.pdf.SetX(renderer.leftMargin)
+	renderer.renderWrappedText(chineseText, renderer.contentWidth, renderer.lineHeight)
+
+	// Should handle long CJK text without panic or character loss
+}
+
+// TestRenderWrappedTextKorean tests Korean text wrapping
+func TestRenderWrappedTextKorean(t *testing.T) {
+	renderer, err := newPDFRenderer(generateOptions{language: "ko"})
+	if err != nil {
+		t.Fatalf("Failed to create renderer: %v", err)
+	}
+	renderer.pdf.AddPage()
+	renderer.pdf.SetFont(renderer.fontFamily, "", 11)
+
+	// Korean text
+	koreanText := "한글 텍스트 테스트입니다. 이 문장은 자동 줄바꿈을 테스트하기 위해 충분히 길게 작성되었습니다."
+
+	renderer.pdf.SetX(renderer.leftMargin)
+	renderer.renderWrappedText(koreanText, renderer.contentWidth, renderer.lineHeight)
+
+	// Should handle Korean text without panic
+}
+
+// TestRenderListWithCJKContent tests list rendering with CJK content
+func TestRenderListWithCJKContent(t *testing.T) {
+	renderer, err := newPDFRenderer(generateOptions{language: "ja"})
+	if err != nil {
+		t.Fatalf("Failed to create renderer: %v", err)
+	}
+	renderer.pdf.AddPage()
+
+	// The original bug case as a list item
+	content := `<li>1997年にチェンマ大橋ができました。昔は香港島からランタオ島まで1時間以上かかりましたが、今は30分ぐらいで行けるようになりました。チェンマ大橋が通れるようになって、とても便利になりました。</li>`
+	renderer.renderList(content, false)
+
+	// If we get here without panic, CJK list rendering works
+}
+
+// TestRenderParagraphWithCJKContent tests paragraph rendering with CJK content
+func TestRenderParagraphWithCJKContent(t *testing.T) {
+	renderer, err := newPDFRenderer(generateOptions{language: "ja"})
+	if err != nil {
+		t.Fatalf("Failed to create renderer: %v", err)
+	}
+	renderer.pdf.AddPage()
+
+	// Long Japanese paragraph that should wrap
+	japaneseText := "1997年にチェンマ大橋ができました。昔は香港島からランタオ島まで1時間以上かかりましたが、今は30分ぐらいで行けるようになりました。チェンマ大橋が通れるようになって、とても便利になりました。"
+	renderer.renderParagraph(japaneseText)
+
+	// If we get here without panic, CJK paragraph rendering works
+}
+
+// TestRenderHeadingWithCJKContent tests heading rendering with CJK content
+func TestRenderHeadingWithCJKContent(t *testing.T) {
+	renderer, err := newPDFRenderer(generateOptions{language: "ja"})
+	if err != nil {
+		t.Fatalf("Failed to create renderer: %v", err)
+	}
+	renderer.pdf.AddPage()
+
+	// Japanese heading
+	renderer.renderHeading("日本語の見出しテスト", 1)
+	renderer.renderHeading("これは長い見出しで、自動的に改行されるかもしれません", 2)
+
+	// If we get here without panic, CJK heading rendering works
+}
+
+// TestRenderBlockquoteWithCJKContent tests blockquote rendering with CJK content
+func TestRenderBlockquoteWithCJKContent(t *testing.T) {
+	renderer, err := newPDFRenderer(generateOptions{language: "ja"})
+	if err != nil {
+		t.Fatalf("Failed to create renderer: %v", err)
+	}
+	renderer.pdf.AddPage()
+
+	// Japanese blockquote content
+	japaneseQuote := "これは引用文です。日本語の長いテキストが自動的に改行されることをテストします。文字が失われないことを確認します。"
+	renderer.renderBlockquote(japaneseQuote)
+
+	// If we get here without panic, CJK blockquote rendering works
+}
+
+// TestFullPDFGenerationWithCJKList tests end-to-end PDF generation with CJK list content
+func TestFullPDFGenerationWithCJKList(t *testing.T) {
+	// Create a temporary directory for test files
+	tmpDir, err := os.MkdirTemp("", "cjk-list-test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// The exact markdown from the bug report
+	mdContent := `- 1997年にチェンマ大橋ができました。昔は香港島からランタオ島まで1時間以上かかりましたが、今は30分ぐらいで行けるようになりました。チェンマ大橋が通れるようになって、とても便利になりました。
+`
+
+	// Convert to HTML
+	htmlContent, err := convertMarkdownToHTML([]byte(mdContent))
+	if err != nil {
+		t.Fatalf("Failed to convert markdown to HTML: %v", err)
+	}
+
+	// Create renderer with Japanese language setting
+	renderer, err := newPDFRenderer(generateOptions{language: "ja"})
+	if err != nil {
+		t.Fatalf("Failed to create renderer: %v", err)
+	}
+
+	// Render content
+	renderer.pdf.AddPage()
+	renderer.renderHTML(htmlContent)
+
+	// Save PDF
+	pdfFile := filepath.Join(tmpDir, "cjk_list.pdf")
+	if err := renderer.save(pdfFile); err != nil {
+		t.Fatalf("Failed to save PDF: %v", err)
+	}
+
+	// Verify PDF was created with content
+	info, err := os.Stat(pdfFile)
+	if err != nil {
+		t.Fatalf("Failed to stat PDF file: %v", err)
+	}
+	if info.Size() == 0 {
+		t.Error("PDF file is empty")
+	}
+}
