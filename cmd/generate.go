@@ -511,11 +511,108 @@ func (r *pdfRenderer) renderHeading(content string, level int) {
 	}
 	r.pdf.SetFont(r.fontFamily, boldStyle, size)
 	r.pdf.SetTextColor(0, 0, 0)
-	r.pdf.MultiCell(r.contentWidth, size*0.5, content, "", "L", false)
+	r.pdf.SetX(r.leftMargin)
+	r.renderWrappedText(content, r.contentWidth, size*0.5)
 	r.pdf.Ln(4)
 
 	// Reset font
 	r.pdf.SetFont(r.fontFamily, "", 11)
+}
+
+// isCJKChar returns true if the rune is a CJK character
+func isCJKChar(c rune) bool {
+	// CJK Unified Ideographs
+	if c >= 0x4e00 && c <= 0x9fff {
+		return true
+	}
+	// CJK Unified Ideographs Extension A
+	if c >= 0x3400 && c <= 0x4dbf {
+		return true
+	}
+	// Hiragana
+	if c >= 0x3040 && c <= 0x309f {
+		return true
+	}
+	// Katakana
+	if c >= 0x30a0 && c <= 0x30ff {
+		return true
+	}
+	// Hangul Syllables
+	if c >= 0xac00 && c <= 0xd7af {
+		return true
+	}
+	// CJK Symbols and Punctuation
+	if c >= 0x3000 && c <= 0x303f {
+		return true
+	}
+	// Fullwidth ASCII variants
+	if c >= 0xff00 && c <= 0xffef {
+		return true
+	}
+	return false
+}
+
+// renderWrappedText renders text with proper CJK line wrapping
+// fpdf's MultiCell has a bug where CJK characters at line break points are lost
+// This function manually splits the text to avoid that issue
+func (r *pdfRenderer) renderWrappedText(content string, width, lineHeight float64) {
+	if content == "" {
+		return
+	}
+
+	// Get the starting X position for continuation lines
+	startX := r.pdf.GetX()
+
+	runes := []rune(content)
+	currentLine := []rune{}
+
+	for i := 0; i < len(runes); i++ {
+		c := runes[i]
+
+		// Handle explicit line breaks
+		if c == '\n' {
+			r.pdf.CellFormat(width, lineHeight, string(currentLine), "", 2, "L", false, 0, "")
+			r.pdf.SetX(startX)
+			currentLine = []rune{}
+			continue
+		}
+
+		// Add character to current line
+		currentLine = append(currentLine, c)
+
+		// Check if we need to wrap
+		lineWidth := r.pdf.GetStringWidth(string(currentLine))
+		if lineWidth > width {
+			// Need to wrap - find break point
+			if len(currentLine) > 1 {
+				// For CJK text, we can break before the current character
+				// For non-CJK text, try to find a space to break at
+				breakAt := len(currentLine) - 1
+
+				if !isCJKChar(c) {
+					// Try to find a space to break at for non-CJK text
+					for j := len(currentLine) - 2; j >= 0; j-- {
+						if currentLine[j] == ' ' {
+							breakAt = j + 1
+							break
+						}
+					}
+				}
+
+				// Output the line up to break point
+				r.pdf.CellFormat(width, lineHeight, string(currentLine[:breakAt]), "", 2, "L", false, 0, "")
+				r.pdf.SetX(startX)
+
+				// Keep the remainder for next line
+				currentLine = currentLine[breakAt:]
+			}
+		}
+	}
+
+	// Output any remaining text
+	if len(currentLine) > 0 {
+		r.pdf.CellFormat(width, lineHeight, string(currentLine), "", 2, "L", false, 0, "")
+	}
 }
 
 // renderParagraph renders a paragraph of text
@@ -530,7 +627,8 @@ func (r *pdfRenderer) renderParagraph(content string) {
 
 	r.pdf.SetFont(r.fontFamily, "", 11)
 	r.pdf.SetTextColor(0, 0, 0)
-	r.pdf.MultiCell(r.contentWidth, r.lineHeight, content, "", "L", false)
+	r.pdf.SetX(r.leftMargin)
+	r.renderWrappedText(content, r.contentWidth, r.lineHeight)
 	r.pdf.Ln(3)
 }
 
@@ -590,7 +688,7 @@ func (r *pdfRenderer) renderBlockquote(content string) {
 	}
 	r.pdf.SetFont(r.fontFamily, italicStyle, 11)
 	r.pdf.SetTextColor(100, 100, 100)
-	r.pdf.MultiCell(r.contentWidth-15, r.lineHeight, content, "", "L", false)
+	r.renderWrappedText(content, r.contentWidth-15, r.lineHeight)
 
 	endY := r.pdf.GetY()
 	r.pdf.Line(r.leftMargin+3, startY, r.leftMargin+3, endY)
@@ -698,7 +796,7 @@ func (r *pdfRenderer) renderListItems(content string, ordered bool, level int, s
 
 		// Render item text
 		if textContent != "" {
-			r.pdf.MultiCell(availableWidth, r.lineHeight, textContent, "", "L", false)
+			r.renderWrappedText(textContent, availableWidth, r.lineHeight)
 		} else {
 			r.pdf.Ln(r.lineHeight)
 		}
