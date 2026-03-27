@@ -355,14 +355,29 @@ func getFontInstallInstructions(language string) string {
 		fontName = "Noto Sans CJK"
 	}
 
+	var brewCask string
+	switch {
+	case lang == "ja":
+		brewCask = "font-noto-sans-jp"
+	case lang == "zh-TW" || lang == "zh-HK":
+		brewCask = "font-noto-sans-tc"
+	case strings.HasPrefix(lang, "zh"):
+		brewCask = "font-noto-sans-sc"
+	case lang == "ko":
+		brewCask = "font-noto-sans-kr"
+	default:
+		brewCask = "font-noto-sans-cjk"
+	}
+
 	var instructions string
 	switch runtime.GOOS {
 	case "darwin":
-		instructions = `Install using Homebrew:
-  brew install --cask font-noto-sans-cjk
-
-Or download from Google Fonts:
-  https://fonts.google.com/noto/specimen/Noto+Sans+JP`
+		instructions = "Install using Homebrew:\n" +
+			"  brew install --cask " + brewCask + "\n\n" +
+			"Or install the full CJK collection (note: not detected automatically):\n" +
+			"  brew install --cask font-noto-sans-cjk\n\n" +
+			"Or download from Google Fonts:\n" +
+			"  https://fonts.google.com/noto/specimen/" + strings.ReplaceAll(fontName, " ", "+")
 	case "linux":
 		instructions = `Install using your package manager:
   # Debian/Ubuntu
