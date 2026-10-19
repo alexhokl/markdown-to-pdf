@@ -17,3 +17,9 @@ markdown-to-pdf generate -i input.md -o output.pdf
 - `-t, --title` - Title of the book (defaults to first H1 heading or filename)
 - `-f, --overwrite` - Overwrite existing PDF file
 
+
+## Agent skill
+
+[`skills/markdown-to-pdf/`](skills/markdown-to-pdf) is an Agent Skill that
+teaches a coding agent to drive the `markdown-to-pdf` CLI. Install it into
+`~/.agents/skills` and `~/.claude/skills` with `task install-skill`.
